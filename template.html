@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<title>Clinic sticker</title>
+<style>
+  @font-face {
+    font-family: "Sticker Bengali";
+    src: url("fonts/NotoSansBengali-ExtraBold.ttf");
+  }
+
+  /* All positions are pixels on the 3072x2048 artwork (clinic-sticker.png). */
+  :root {
+    --qr-size: 413px;
+    --name-color: rgb(195, 7, 6);
+    --name-left: 103px;      /* aligned with the red banner */
+    --name-baseline: 322px;  /* baseline of the name's last line, above "এর যেকোনো" */
+    --name-leading: 1.18;
+    --name-max-width: 1095px;
+  }
+
+  @page { margin: 0; }
+  html, body { margin: 0; background: transparent; }
+  html { overflow: hidden; }
+  body { position: relative; width: 3072px; height: 2048px; }
+
+  /* Export mode: showOnly(id) leaves a single sticker filling the page. */
+  body[data-only] .sticker { display: none; }
+  body[data-only="portrait"] #portrait,
+  body[data-only="landscape-1"] #landscape-1,
+  body[data-only="landscape-2"] #landscape-2 { display: block; left: 0; top: 0; }
+
+  /* Each sticker is a window onto the artwork, so it can be screenshotted on its own. */
+  .sticker {
+    position: absolute;
+    left: var(--x); top: var(--y); width: var(--w); height: var(--h);
+    border-radius: 22px;
+    overflow: hidden;
+    background: url("clinic-sticker.png") calc(-1 * var(--x)) calc(-1 * var(--y)) no-repeat;
+  }
+  #portrait    { --x: 25px;   --y: 26px;   --w: 1241px; --h: 2001px; }
+  #landscape-1 { --x: 1295px; --y: 27px;   --w: 1751px; --h: 1053px; }
+  #landscape-2 { --x: 1295px; --y: 1111px; --w: 1751px; --h: 915px; }
+
+  .qr {
+    position: absolute;
+    left: calc(var(--qx) - var(--x)); top: calc(var(--qy) - var(--y));
+    width: var(--qr-size); height: var(--qr-size);
+  }
+  .qr svg { display: block; width: 100%; height: 100%; }
+  .qr-logo {
+    position: absolute; left: 50%; top: 50%;
+    width: 38%;              /* keep in sync with LOGO_WIDTH in generate.py */
+    transform: translate(-50%, -50%);
+  }
+  #portrait .qr    { --qx: 390px;  --qy: 1175px; }
+  #landscape-1 .qr { --qx: 1468px; --qy: 205px; }
+  #landscape-2 .qr { --qx: 1468px; --qy: 1269px; }
+
+  .name {
+    position: absolute;
+    left: calc(var(--name-left) - var(--x));
+    /* The last line's baseline sits 0.408em (font descent) plus half the leading
+       (line height minus the font's 1.325em content height) above the box bottom.
+       Anchoring the baseline keeps the gap to the next line the same at every size. */
+    bottom: calc(var(--h) - (var(--name-baseline) - var(--y))
+                 - ((var(--name-leading) - 1.325) / 2 + 0.408) * 1em);
+    max-width: var(--name-max-width);
+    font-family: "Sticker Bengali", sans-serif;
+    line-height: var(--name-leading);
+    color: var(--name-color);
+    text-wrap: balance;      /* wrapped names split into lines of similar length */
+  }
+</style>
+</head>
+<body>
+  <div class="sticker" id="portrait">
+    <div class="name"></div>
+    <div class="qr"><div class="qr-code"></div><img class="qr-logo" src="medikzo-logo-qr.png" alt=""></div>
+  </div>
+  <div class="sticker" id="landscape-1"><div class="qr"><div class="qr-code"></div><img class="qr-logo" src="medikzo-logo-qr.png" alt=""></div></div>
+  <div class="sticker" id="landscape-2"><div class="qr"><div class="qr-code"></div><img class="qr-logo" src="medikzo-logo-qr.png" alt=""></div></div>
+
+<script>
+  // Font sizes (px) tried in order: largest first, more lines only when needed.
+  const NAME_SIZE = 150;
+  const NAME_TIERS = [
+    { lines: 1, from: NAME_SIZE, to: 96 },
+    { lines: 2, from: 108, to: 72 },
+    { lines: 3, from: 70, to: 54 },
+    { lines: 4, from: 52, to: 42 },
+  ];
+  const NAME_MIN_TOP = 68;  // px the name must stay clear of the sticker's top edge, close to its left margin
+
+  // Returns false when the name cannot fit even at the smallest size.
+  function fitName(el) {
+    const maxWidth = parseFloat(getComputedStyle(el).maxWidth);
+    el.style.whiteSpace = "normal";
+    for (const tier of NAME_TIERS) {
+      for (let size = tier.from; size >= tier.to; size -= 2) {
+        el.style.fontSize = size + "px";
+        const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+        if (el.scrollWidth <= maxWidth + 1 &&
+            el.offsetHeight <= tier.lines * lineHeight + 1 &&
+            el.offsetTop >= NAME_MIN_TOP) return true;
+      }
+    }
+    return false;
+  }
+
+  // Called by generate.py; qrSvg is the QR code as SVG markup so it stays vector in the PDF.
+  // Resolves to whether the name fits.
+  async function setSticker(name, qrSvg) {
+    // Back to the full sheet: the name can only be measured while its sticker is visible.
+    delete document.body.dataset.only;
+    document.body.removeAttribute("style");
+    const nameEl = document.querySelector(".name");
+    nameEl.textContent = name;
+    await document.fonts.load(`${NAME_SIZE}px "Sticker Bengali"`, name);
+    const fits = fitName(nameEl);
+    document.querySelectorAll(".qr-code").forEach((el) => { el.innerHTML = qrSvg; });
+    await Promise.all([...document.images].map((img) => img.decode()));
+    return fits;
+  }
+
+  // Leaves one sticker on the page and returns its size in px, for the PDF export.
+  function showOnly(id) {
+    const el = document.getElementById(id);
+    document.body.dataset.only = id;
+    document.body.style.width = el.offsetWidth + "px";
+    document.body.style.height = el.offsetHeight + "px";
+    return { width: el.offsetWidth, height: el.offsetHeight };
+  }
+
+  // Preview in a browser: template.html?name=নারায়ণ পলিক্লিনিক
+  const preview = new URLSearchParams(location.search).get("name");
+  if (preview) {
+    const nameEl = document.querySelector(".name");
+    nameEl.textContent = preview;
+    document.fonts.ready.then(() => fitName(nameEl));
+  }
+</script>
+</body>
+</html>
