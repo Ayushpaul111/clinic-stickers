@@ -1,7 +1,8 @@
 """Generate print-ready clinic stickers: python generate.py [clinics.csv]
 
 For every row of the CSV (name_bn, url, slug) this writes
-output/<slug>/portrait.pdf, landscape-1.pdf and landscape-2.pdf.
+output/<slug>/portrait.pdf, landscape-1.pdf and landscape-2.pdf; without a
+slug the folder is named after the clinic. app.py is a page for the same job.
 The clinic name and QR code are vector in the PDF; the artwork is embedded
 at its full resolution.
 """
@@ -27,12 +28,13 @@ STICKERS = ["portrait", "landscape-1", "landscape-2"]
 PRINT_DPI = 300
 
 MAX_QR_VERSION = 10  # denser codes than this get a warning: small modules scan less reliably
+DENSE_QR_NOTE = "long link makes a dense QR code; a shorter link scans more reliably"
 
 LOGO_WIDTH = 0.38  # share of the QR width taken by the logo; matches .qr-logo in template.html
 
 
 def make_qr_svg(url: str) -> tuple[str, int]:
-    """QR code as SVG, with a white patch in the centre for the logo. Returns (svg, version)."""
+    """QR code as SVG, on a transparent background, with a clear patch in the centre for the logo. Returns (svg, version)."""
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, border=0)
     qr.add_data(url)
     try:
@@ -73,7 +75,6 @@ def make_qr_svg(url: str) -> tuple[str, int]:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {n} {n}" '
         f'shape-rendering="crispEdges">'
-        f'<rect width="{n}" height="{n}" fill="#fff"/>'
         f'<path d="{"".join(path)}" fill="#000"/></svg>'
     ), qr.version
 
@@ -103,41 +104,49 @@ def check_row(name: str, url: str) -> str | None:
     return None
 
 
-def main():
-    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "clinics.csv"
-    problems = []  # (row number, message)
+def folder_name(text: str) -> str:
+    """Text with the characters Windows does not allow in a folder name replaced."""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", text).strip(" .-")
+
+
+def generate(rows):
+    """Make the stickers for (number, row) pairs, as read_rows gives them.
+
+    Yields (number, folder, notes) for every row: folder is where its PDFs were
+    saved, or None when the row was skipped; notes say why, or what to check.
+    """
     used_slugs = set()
-    done = 0
 
     with sync_playwright() as p:
         browser = p.chromium.launch(channel="msedge")
         page = browser.new_page()
         page.goto(TEMPLATE.as_uri())
 
-        for number, row in read_rows(csv_path):
+        for number, row in rows:
             name = " ".join(row.get("name_bn", "").split())
             url = row.get("url", "")
             reason = check_row(name, url)
             if reason:
-                problems.append((number, f"skipped: {reason}"))
+                yield number, None, [f"skipped: {reason}"]
                 continue
+            notes = []
 
-            # Folder name: letters, digits, - and _ only, and unique within this run.
-            slug = re.sub(r"[^\w-]+", "-", row.get("slug", "")).strip("-") or f"clinic-{number}"
+            # Folder name: the slug, or the clinic name without one; unique within this run.
+            slug = folder_name(row.get("slug", "")) or folder_name(name) or f"clinic-{number}"
             if slug.lower() in used_slugs:
                 base, n = slug, 2
                 while slug.lower() in used_slugs:
                     slug, n = f"{base}-{n}", n + 1
-                problems.append((number, f"slug '{base}' already used, saved as '{slug}'"))
+                notes.append(f"slug '{base}' already used, saved as '{slug}'")
             used_slugs.add(slug.lower())
 
             try:
                 svg, version = make_qr_svg(url)
                 if not page.evaluate("([name, qr]) => setSticker(name, qr)", [name, svg]):
-                    problems.append((number, "skipped: name is too long to fit on the sticker"))
+                    yield number, None, notes + ["skipped: name is too long to fit on the sticker"]
                     continue
                 if version > MAX_QR_VERSION:
-                    problems.append((number, "long link makes a dense QR code; a shorter link scans more reliably"))
+                    notes.append(DENSE_QR_NOTE)
 
                 out_dir = OUTPUT / slug
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -151,12 +160,23 @@ def main():
                         print_background=True,
                     )
             except Exception as error:  # keep the batch going; report the row at the end
-                problems.append((number, f"skipped: {error or type(error).__name__}"))
+                yield number, None, notes + [f"skipped: {error or type(error).__name__}"]
                 continue
-            done += 1
-            print(f"row {number}: {slug} -> {out_dir}")
+            yield number, out_dir, notes
 
         browser.close()
+
+
+def main():
+    csv_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "clinics.csv"
+    problems = []  # (row number, message)
+    done = 0
+
+    for number, out_dir, notes in generate(read_rows(csv_path)):
+        problems += [(number, note) for note in notes]
+        if out_dir:
+            done += 1
+            print(f"row {number}: {out_dir.name} -> {out_dir}")
 
     print(f"\n{done} clinic(s) generated.")
     if problems:

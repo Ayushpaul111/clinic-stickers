@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinic stickers</title>
+<style>
+  :root {
+    --red: rgb(195, 7, 6);
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #e2dcd8;
+    --page: #f6f3f1;
+    --card: #fff;
+    --ok: #15803d;
+    --warn: #a16207;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 32px 48px;
+    background: var(--page); color: var(--ink);
+    font: 15px/1.45 "Segoe UI", "Nirmala UI", system-ui, sans-serif;
+  }
+  h1 { margin: 0; font-size: 22px; }
+  h1 span { color: var(--red); }
+  .intro { margin: 4px 0 22px; color: var(--muted); }
+
+  #not-running { margin: 0 0 22px; padding: 14px 18px; border: 1px solid var(--red); border-radius: 12px; background: #fdf0f0; }
+  #not-running a { color: var(--red); }
+  .layout[inert] { opacity: .45; }
+  .layout { display: grid; grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); gap: 24px; align-items: start; }
+  @media (max-width: 1050px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .preview { position: sticky; top: 20px; }
+  h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+
+  /* One clinic per row: number, name, link, folder, remove. */
+  .cols, .fields { display: grid; grid-template-columns: 26px minmax(0, 5fr) minmax(0, 6fr) minmax(0, 3fr) 30px; gap: 8px; align-items: center; }
+  .cols { margin-bottom: 6px; font-size: 12.5px; color: var(--muted); }
+  .cols span:first-child { grid-column: 2; }
+  #rows { counter-reset: clinic; }
+  .row { counter-increment: clinic; padding: 4px 0; }
+  .row.current input[name="name_bn"] { border-color: var(--red); }
+  .fields::before { content: counter(clinic); color: var(--muted); font-size: 13px; text-align: right; }
+  input {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: #fff; color: inherit; font: inherit;
+  }
+  input:focus { outline: 2px solid var(--red); outline-offset: -1px; }
+  input::placeholder { color: #b5aca6; }
+  .remove { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 18px; cursor: pointer; }
+  .remove:hover { background: #fbe9e9; color: var(--red); }
+  .status { margin: 3px 0 0 34px; font-size: 13px; }
+  .status:empty { display: none; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.error { color: var(--red); }
+
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+  button.main, button.plain { padding: 9px 16px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.main { border: 1px solid var(--red); background: var(--red); color: #fff; }
+  button.main:disabled { opacity: .55; cursor: progress; }
+  button.plain { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  button.plain:hover { border-color: #c9c0ba; }
+  #summary { color: var(--muted); }
+  .hint { margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+
+  /* The real template, scaled down: what you see is what the PDFs contain. */
+  .sheet { position: relative; aspect-ratio: 3072 / 2048; overflow: hidden; border-radius: 8px; background: #d9d3cf; }
+  .sheet iframe { position: absolute; left: 0; top: 0; width: 3072px; height: 2048px; border: 0; transform-origin: 0 0; pointer-events: none; }
+  #preview-note { margin: 10px 0 0; font-size: 13px; color: var(--red); min-height: 1.45em; }
+</style>
+</head>
+<body>
+  <h1>Clinic <span>stickers</span></h1>
+  <p class="intro">Add each clinic's name and its profile link, then generate the three stickers for all of them.</p>
+
+  <p id="not-running" hidden>
+    This page only works when the generator opens it. Double-click <b>start.bat</b> in the project folder
+    (or run <code>python app.py</code>) and use the page it opens:
+    <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>
+  </p>
+
+  <div class="layout">
+    <section class="card">
+      <h2>Clinics</h2>
+      <div class="cols"><span>Clinic name</span><span>Profile link (for the QR code)</span><span>Folder name (optional)</span></div>
+      <div id="rows"></div>
+      <div class="actions">
+        <button class="plain" id="add" type="button">+ Add clinic</button>
+        <button class="main" id="generate" type="button">Generate stickers</button>
+        <button class="plain" id="open" type="button">Open output folder</button>
+        <span id="summary"></span>
+      </div>
+      <p class="hint">Tip: copy the name and link columns from Excel or Google Sheets and paste into a name box to fill many rows at once. The list is saved automatically.</p>
+    </section>
+
+    <section class="card preview">
+      <h2 id="preview-title">Preview</h2>
+      <div class="sheet"><iframe id="sheet" title="Sticker preview"></iframe></div>
+      <p id="preview-note"></p>
+    </section>
+  </div>
+
+  <template id="row">
+    <div class="row">
+      <div class="fields">
+        <input name="name_bn" placeholder="নারায়ণ পলিক্লিনিক" autocomplete="off">
+        <input name="url" placeholder="https://share.medikzo.com/facility/…" autocomplete="off" spellcheck="false">
+        <input name="slug" placeholder="clinic name" autocomplete="off" spellcheck="false">
+        <button class="remove" type="button" title="Remove this clinic">&times;</button>
+      </div>
+      <div class="status"></div>
+    </div>
+  </template>
+
+<script>
+  const FIELDS = ["name_bn", "url", "slug"];
+  const rowsEl = document.getElementById("rows");
+  const summary = document.getElementById("summary");
+  const generateButton = document.getElementById("generate");
+  const json = { method: "POST", headers: { "Content-Type": "application/json" } };
+
+  function addRow(clinic = {}) {
+    const row = document.getElementById("row").content.firstElementChild.cloneNode(true);
+    for (const field of FIELDS) row.querySelector(`[name=${field}]`).value = clinic[field] || "";
+    rowsEl.append(row);
+    return row;
+  }
+
+  function values(row) {
+    return Object.fromEntries(FIELDS.map((field) => [field, row.querySelector(`[name=${field}]`).value.trim()]));
+  }
+
+  // Rows with something in them; blank rows are never saved or generated.
+  function filledRows() {
+    return [...rowsEl.children].filter((row) => values(row).name_bn || values(row).url);
+  }
+
+  function setStatus(row, text, kind = "") {
+    const status = row.querySelector(".status");
+    status.textContent = text;
+    status.className = "status " + kind;
+  }
+
+  let saveTimer;
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      fetch("/api/clinics", { ...json, body: JSON.stringify({ clinics: filledRows().map(values) }) })
+        .catch(() => { summary.textContent = "Could not save: is app.py still running?"; });
+    }, 600);
+  }
+
+  // ---- Preview: the template itself in an iframe, filled in for the row being edited.
+  const frame = document.getElementById("sheet");
+  const sheet = frame.parentElement;
+  const frameReady = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+  frame.src = "/template.html";
+  new ResizeObserver(() => { frame.style.transform = `scale(${sheet.clientWidth / 3072})`; }).observe(sheet);
+
+  let previewTimer, previewRun = 0;
+  function schedulePreview(row) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => preview(row), 250);
+  }
+
+  async function preview(row) {
+    const run = ++previewRun;  // a newer preview makes this one stop
+    const { name_bn, url } = values(row);
+    rowsEl.querySelector(".current")?.classList.remove("current");
+    row.classList.add("current");
+    let svg = "", note = "";
+    try {
+      if (url) {
+        const qr = await (await fetch("/api/qr?url=" + encodeURIComponent(url))).json();
+        svg = qr.svg || "";
+        note = qr.error ? "Link: " + qr.error : qr.note || "";
+      }
+      await frameReady;
+      if (run !== previewRun) return;
+      const fits = await frame.contentWindow.setSticker(name_bn, svg);
+      if (run !== previewRun) return;
+      if (!fits) note = "This name is too long to fit on the sticker.";
+    } catch {
+      note = "Preview unavailable: is app.py still running?";
+    }
+    document.getElementById("preview-title").textContent = name_bn ? "Preview: " + name_bn : "Preview";
+    document.getElementById("preview-note").textContent = note;
+  }
+
+  // ---- Editing the list
+  rowsEl.addEventListener("input", (event) => {
+    const row = event.target.closest(".row");
+    setStatus(row, "");
+    scheduleSave();
+    schedulePreview(row);
+  });
+  rowsEl.addEventListener("focusin", (event) => {
+    const row = event.target.closest(".row");
+    if (row && !row.classList.contains("current")) schedulePreview(row);
+  });
+  rowsEl.addEventListener("click", (event) => {
+    if (!event.target.matches(".remove")) return;
+    event.target.closest(".row").remove();
+    if (!rowsEl.children.length) addRow();
+    scheduleSave();
+  });
+  // Enter moves down a row, adding one at the end.
+  rowsEl.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || !event.target.matches("input")) return;
+    const next = event.target.closest(".row").nextElementSibling || addRow();
+    next.querySelector(`[name=${event.target.name}]`).focus();
+  });
+  // Pasting cells copied from a spreadsheet fills the rows below, one clinic per line.
+  rowsEl.addEventListener("paste", (event) => {
+    const text = event.clipboardData.getData("text").replace(/\r/g, "").replace(/\n+$/, "");
+    if (!/[\n\t]/.test(text) || !event.target.matches("input")) return;
+    event.preventDefault();
+    const firstField = FIELDS.indexOf(event.target.name);
+    let row = event.target.closest(".row");
+    for (const line of text.split("\n")) {
+      line.split("\t").forEach((cell, i) => {
+        const field = FIELDS[firstField + i];
+        if (field) row.querySelector(`[name=${field}]`).value = cell.trim();
+      });
+      setStatus(row, "");
+      row = row.nextElementSibling || addRow();
+    }
+    if (!filledRows().includes(rowsEl.lastElementChild) && rowsEl.children.length > 1) rowsEl.lastElementChild.remove();
+    scheduleSave();
+    schedulePreview(event.target.closest(".row"));
+  });
+
+  document.getElementById("add").addEventListener("click", () => addRow().querySelector("input").focus());
+  document.getElementById("open").addEventListener("click", () => fetch("/api/open", { ...json, body: "{}" }));
+
+  // ---- Generating: the server answers with one line of JSON per clinic as it finishes.
+  generateButton.addEventListener("click", async () => {
+    const sent = filledRows();
+    if (!sent.length) { summary.textContent = "Add a clinic first."; return; }
+    clearTimeout(saveTimer);  // generating saves the list too
+    generateButton.disabled = true;
+    sent.forEach((row) => setStatus(row, ""));
+    let made = 0, finished = 0, attention = 0;
+    summary.textContent = `Generating 0 of ${sent.length}…`;
+    try {
+      const response = await fetch("/api/generate", { ...json, body: JSON.stringify({ clinics: sent.map(values) }) });
+      if (!response.ok) throw new Error("the generator did not answer; start it again with start.bat");
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const lines = (buffer + value).split("\n");
+        buffer = lines.pop();
+        for (const line of lines.filter(Boolean)) {
+          const result = JSON.parse(line);
+          if (result.error) throw new Error(result.error);
+          const notes = result.notes.join("; ");
+          if (result.folder) {
+            made++;
+            setStatus(sent[result.row - 1], `Saved in output/${result.folder}` + (notes ? ` (${notes})` : ""), notes ? "warn" : "ok");
+          } else {
+            setStatus(sent[result.row - 1], notes, "error");
+          }
+          if (notes) attention++;
+          summary.textContent = `Generating ${++finished} of ${sent.length}…`;
+        }
+      }
+      if (finished < sent.length) throw new Error("the generator stopped early");
+      summary.textContent = `${made} of ${sent.length} generated` + (attention ? `, ${attention} to check.` : ".");
+    } catch (error) {
+      summary.textContent = `Stopped after ${finished} of ${sent.length}: ${error.message}`;
+    } finally {
+      generateButton.disabled = false;
+    }
+  });
+
+  // ---- Start with the saved list
+  fetch("/api/clinics").then((response) => {
+    if (!response.ok && response.status !== 500) throw new Error("not served by app.py");
+    return response.json();
+  }).then((clinics) => {
+    if (clinics.error) summary.textContent = clinics.error;
+    (Array.isArray(clinics) && clinics.length ? clinics : [{}]).forEach(addRow);
+    preview(rowsEl.firstElementChild);
+  }).catch(() => {
+    // Opened as a file or through an editor's preview server: nothing here can work.
+    document.getElementById("not-running").hidden = false;
+    document.querySelector(".layout").inert = true;
+  });
+</script>
+</body>
+</html>
