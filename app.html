@@ -34,7 +34,7 @@
   .preview { position: sticky; top: 20px; }
   h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 
-  /* One clinic per row: number, name, link, folder, remove. */
+  /* One clinic per row: number, name, link, file name, remove. */
   .cols, .fields { display: grid; grid-template-columns: 26px minmax(0, 5fr) minmax(0, 6fr) minmax(0, 3fr) 30px; gap: 8px; align-items: center; }
   .cols { margin-bottom: 6px; font-size: 12.5px; color: var(--muted); }
   .cols span:first-child { grid-column: 2; }
@@ -74,7 +74,7 @@
 </head>
 <body>
   <h1>Clinic <span>stickers</span></h1>
-  <p class="intro">Add each clinic's name and its profile link, then generate the three stickers for all of them.</p>
+  <p class="intro">Add each clinic's name and its profile link, then generate the sticker sheet (18 × 12 in, all three stickers) for each of them.</p>
 
   <p id="not-running" hidden>
     This page only works when the generator opens it. Double-click <b>start.bat</b> in the project folder
@@ -85,7 +85,7 @@
   <div class="layout">
     <section class="card">
       <h2>Clinics</h2>
-      <div class="cols"><span>Clinic name</span><span>Profile link (for the QR code)</span><span>Folder name (optional)</span></div>
+      <div class="cols"><span>Clinic name</span><span>Profile link (for the QR code)</span><span>File name (optional)</span></div>
       <div id="rows"></div>
       <div class="actions">
         <button class="plain" id="add" type="button">+ Add clinic</button>
@@ -259,9 +259,9 @@
           const result = JSON.parse(line);
           if (result.error) throw new Error(result.error);
           const notes = result.notes.join("; ");
-          if (result.folder) {
+          if (result.file) {
             made++;
-            setStatus(sent[result.row - 1], `Saved in output/${result.folder}` + (notes ? ` (${notes})` : ""), notes ? "warn" : "ok");
+            setStatus(sent[result.row - 1], `Saved as output/${result.file}` + (notes ? ` (${notes})` : ""), notes ? "warn" : "ok");
           } else {
             setStatus(sent[result.row - 1], notes, "error");
           }

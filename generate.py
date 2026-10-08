@@ -1,10 +1,9 @@
 """Generate print-ready clinic stickers: python generate.py [clinics.csv]
 
-For every row of the CSV (name_bn, url, slug) this writes
-output/<slug>/portrait.pdf, landscape-1.pdf and landscape-2.pdf; without a
-slug the folder is named after the clinic. app.py is a page for the same job.
-The clinic name and QR code are vector in the PDF; the artwork is embedded
-at its full resolution.
+For every row of the CSV (name_bn, url, slug) this writes output/<slug>.pdf:
+one 18 x 12 in sheet with all three stickers. Without a slug the file is named
+after the clinic. app.py is a page for the same job. The clinic name and QR
+codes are vector in the PDF; the artwork is embedded at its full resolution.
 """
 
 import csv
@@ -20,12 +19,10 @@ ROOT = Path(__file__).parent
 TEMPLATE = ROOT / "template.html"
 LOGO = ROOT / "medikzo-logo-qr.png"
 OUTPUT = ROOT / "output"
-STICKERS = ["portrait", "landscape-1", "landscape-2"]
 
-# Physical size of the PDF pages: artwork pixels per inch. At 300 the portrait
-# sticker is 105 x 169 mm. PDFs can be scaled at print time; this is the size
-# at which the background artwork is still fully sharp.
-PRINT_DPI = 300
+# Printed size of the sheet. The artwork is 3072 x 2048 px, the same 3:2 shape.
+SHEET_WIDTH_IN, SHEET_HEIGHT_IN = 18, 12
+SHEET_WIDTH_PX = 3072
 
 MAX_QR_VERSION = 10  # denser codes than this get a warning: small modules scan less reliably
 DENSE_QR_NOTE = "long link makes a dense QR code; a shorter link scans more reliably"
@@ -104,16 +101,16 @@ def check_row(name: str, url: str) -> str | None:
     return None
 
 
-def folder_name(text: str) -> str:
-    """Text with the characters Windows does not allow in a folder name replaced."""
+def file_name(text: str) -> str:
+    """Text with the characters Windows does not allow in a file name replaced."""
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", text).strip(" .-")
 
 
 def generate(rows):
     """Make the stickers for (number, row) pairs, as read_rows gives them.
 
-    Yields (number, folder, notes) for every row: folder is where its PDFs were
-    saved, or None when the row was skipped; notes say why, or what to check.
+    Yields (number, pdf, notes) for every row: pdf is the path of its sheet,
+    or None when the row was skipped; notes say why, or what to check.
     """
     used_slugs = set()
 
@@ -131,8 +128,8 @@ def generate(rows):
                 continue
             notes = []
 
-            # Folder name: the slug, or the clinic name without one; unique within this run.
-            slug = folder_name(row.get("slug", "")) or folder_name(name) or f"clinic-{number}"
+            # File name: the slug, or the clinic name without one; unique within this run.
+            slug = file_name(row.get("slug", "")) or file_name(name) or f"clinic-{number}"
             if slug.lower() in used_slugs:
                 base, n = slug, 2
                 while slug.lower() in used_slugs:
@@ -148,21 +145,19 @@ def generate(rows):
                 if version > MAX_QR_VERSION:
                     notes.append(DENSE_QR_NOTE)
 
-                out_dir = OUTPUT / slug
-                out_dir.mkdir(parents=True, exist_ok=True)
-                for sticker in STICKERS:
-                    size = page.evaluate("id => showOnly(id)", sticker)
-                    page.pdf(
-                        path=out_dir / f"{sticker}.pdf",
-                        width=f"{size['width'] / PRINT_DPI}in",
-                        height=f"{size['height'] / PRINT_DPI}in",
-                        scale=96 / PRINT_DPI,
-                        print_background=True,
-                    )
+                OUTPUT.mkdir(exist_ok=True)
+                pdf = OUTPUT / f"{slug}.pdf"
+                page.pdf(
+                    path=pdf,
+                    width=f"{SHEET_WIDTH_IN}in",
+                    height=f"{SHEET_HEIGHT_IN}in",
+                    scale=SHEET_WIDTH_IN * 96 / SHEET_WIDTH_PX,
+                    print_background=True,
+                )
             except Exception as error:  # keep the batch going; report the row at the end
                 yield number, None, notes + [f"skipped: {error or type(error).__name__}"]
                 continue
-            yield number, out_dir, notes
+            yield number, pdf, notes
 
         browser.close()
 
@@ -172,11 +167,11 @@ def main():
     problems = []  # (row number, message)
     done = 0
 
-    for number, out_dir, notes in generate(read_rows(csv_path)):
+    for number, pdf, notes in generate(read_rows(csv_path)):
         problems += [(number, note) for note in notes]
-        if out_dir:
+        if pdf:
             done += 1
-            print(f"row {number}: {out_dir.name} -> {out_dir}")
+            print(f"row {number}: {pdf}")
 
     print(f"\n{done} clinic(s) generated.")
     if problems:

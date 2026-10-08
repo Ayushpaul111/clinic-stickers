@@ -111,8 +111,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         try:
             with GENERATING:
-                for number, out_dir, notes in generate(enumerate(clinics, start=1)):
-                    send_line({"row": number, "folder": out_dir.name if out_dir else None, "notes": notes})
+                for number, pdf, notes in generate(enumerate(clinics, start=1)):
+                    send_line({"row": number, "file": pdf.name if pdf else None, "notes": notes})
         except ConnectionError:  # the page was closed mid-run
             pass
         except Exception as error:

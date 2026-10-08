@@ -20,23 +20,15 @@
   }
 
   @page { margin: 0; }
-  html, body { margin: 0; background: transparent; }
+  html, body { margin: 0; }
   html { overflow: hidden; }
-  body { position: relative; width: 3072px; height: 2048px; }
+  /* The whole sheet, with all three stickers, is one page. */
+  body { position: relative; width: 3072px; height: 2048px; background: url("clinic-sticker.png") no-repeat; }
 
-  /* Export mode: showOnly(id) leaves a single sticker filling the page. */
-  body[data-only] .sticker { display: none; }
-  body[data-only="portrait"] #portrait,
-  body[data-only="landscape-1"] #landscape-1,
-  body[data-only="landscape-2"] #landscape-2 { display: block; left: 0; top: 0; }
-
-  /* Each sticker is a window onto the artwork, so it can be screenshotted on its own. */
+  /* Each sticker's area on the sheet; the name and QR codes are placed inside. */
   .sticker {
     position: absolute;
     left: var(--x); top: var(--y); width: var(--w); height: var(--h);
-    border-radius: 22px;
-    overflow: hidden;
-    background: url("clinic-sticker.png") calc(-1 * var(--x)) calc(-1 * var(--y)) no-repeat;
   }
   #portrait    { --x: 25px;   --y: 26px;   --w: 1241px; --h: 2001px; }
   #landscape-1 { --x: 1295px; --y: 27px;   --w: 1751px; --h: 1053px; }
@@ -111,9 +103,6 @@
   // Called by generate.py; qrSvg is the QR code as SVG markup so it stays vector in the PDF.
   // Resolves to whether the name fits.
   async function setSticker(name, qrSvg) {
-    // Back to the full sheet: the name can only be measured while its sticker is visible.
-    delete document.body.dataset.only;
-    document.body.removeAttribute("style");
     const nameEl = document.querySelector(".name");
     nameEl.textContent = name;
     await document.fonts.load(`${NAME_SIZE}px "Sticker Bengali"`, name);
@@ -121,15 +110,6 @@
     document.querySelectorAll(".qr-code").forEach((el) => { el.innerHTML = qrSvg; });
     await Promise.all([...document.images].map((img) => img.decode()));
     return fits;
-  }
-
-  // Leaves one sticker on the page and returns its size in px, for the PDF export.
-  function showOnly(id) {
-    const el = document.getElementById(id);
-    document.body.dataset.only = id;
-    document.body.style.width = el.offsetWidth + "px";
-    document.body.style.height = el.offsetHeight + "px";
-    return { width: el.offsetWidth, height: el.offsetHeight };
   }
 
   // Preview in a browser: template.html?name=নারায়ণ পলিক্লিনিক
