@@ -1,2 +1,13 @@
-__pycache__/
+# Generated
 output/
+__pycache__/
+*.pyc
+
+# Local data: the clinic list is edited through the app
+clinics.csv
+
+# Environments and editors
+.venv/
+venv/
+.vscode/
+.idea/

@@ -16,8 +16,9 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).parent
-TEMPLATE = ROOT / "template.html"
-LOGO = ROOT / "medikzo-logo-qr.png"
+STATIC = ROOT / "static"  # the page, the sticker template and the artwork it uses
+TEMPLATE = STATIC / "template.html"
+LOGO = STATIC / "medikzo-logo-qr.png"
 OUTPUT = ROOT / "output"
 
 # Printed size of the sheet. The artwork is 3072 x 2048 px, the same 3:2 shape.
@@ -27,7 +28,7 @@ SHEET_WIDTH_PX = 3072
 MAX_QR_VERSION = 10  # denser codes than this get a warning: small modules scan less reliably
 DENSE_QR_NOTE = "long link makes a dense QR code; a shorter link scans more reliably"
 
-LOGO_WIDTH = 0.38  # share of the QR width taken by the logo; matches .qr-logo in template.html
+LOGO_WIDTH = 0.38  # share of the QR width taken by the logo; matches .qr-logo in static/template.html
 
 
 def make_qr_svg(url: str) -> tuple[str, int]:
@@ -106,8 +107,8 @@ def file_name(text: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", text).strip(" .-")
 
 
-def generate(rows):
-    """Make the stickers for (number, row) pairs, as read_rows gives them.
+def generate(rows, output_dir: Path = OUTPUT):
+    """Make the stickers for (number, row) pairs, as read_rows gives them, into output_dir.
 
     Yields (number, pdf, notes) for every row: pdf is the path of its sheet,
     or None when the row was skipped; notes say why, or what to check.
@@ -145,8 +146,8 @@ def generate(rows):
                 if version > MAX_QR_VERSION:
                     notes.append(DENSE_QR_NOTE)
 
-                OUTPUT.mkdir(exist_ok=True)
-                pdf = OUTPUT / f"{slug}.pdf"
+                output_dir.mkdir(exist_ok=True)
+                pdf = output_dir / f"{slug}.pdf"
                 page.pdf(
                     path=pdf,
                     width=f"{SHEET_WIDTH_IN}in",

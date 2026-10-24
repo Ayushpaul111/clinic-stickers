@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clinic stickers</title>
+<title>Medikzo Stickers</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
   :root {
     --red: rgb(195, 7, 6);
@@ -21,9 +22,9 @@
     background: var(--page); color: var(--ink);
     font: 15px/1.45 "Segoe UI", "Nirmala UI", system-ui, sans-serif;
   }
-  h1 { margin: 0; font-size: 22px; }
-  h1 span { color: var(--red); }
-  .intro { margin: 4px 0 22px; color: var(--muted); }
+  h1 { margin: 0; line-height: 0; }
+  h1 img { width: 190px; height: auto; }
+  .intro { margin: 10px 0 22px; color: var(--muted); }
 
   #not-running { margin: 0 0 22px; padding: 14px 18px; border: 1px solid var(--red); border-radius: 12px; background: #fdf0f0; }
   #not-running a { color: var(--red); }
@@ -73,13 +74,12 @@
 </style>
 </head>
 <body>
-  <h1>Clinic <span>stickers</span></h1>
-  <p class="intro">Add each clinic's name and its profile link, then generate the sticker sheet (18 × 12 in, all three stickers) for each of them.</p>
+  <h1><img src="medikzo-stickers.svg" alt="Medikzo Stickers" width="190" height="55"></h1>
+  <p class="intro">Add each clinic's name and its profile link, then generate the sticker sheet (18 × 12 in, all three stickers) for each of them. The PDFs download to this computer.</p>
 
   <p id="not-running" hidden>
-    This page only works when the generator opens it. Double-click <b>start.bat</b> in the project folder
-    (or run <code>python app.py</code>) and use the page it opens:
-    <a href="http://127.0.0.1:8765">http://127.0.0.1:8765</a>
+    This page only works when the generator serves it. On the computer that hosts it, double-click
+    <b>start.bat</b> (or run <code>python app.py</code>) and open the address it shows.
   </p>
 
   <div class="layout">
@@ -90,10 +90,9 @@
       <div class="actions">
         <button class="plain" id="add" type="button">+ Add clinic</button>
         <button class="main" id="generate" type="button">Generate stickers</button>
-        <button class="plain" id="open" type="button">Open output folder</button>
         <span id="summary"></span>
       </div>
-      <p class="hint">Tip: copy the name and link columns from Excel or Google Sheets and paste into a name box to fill many rows at once. The list is saved automatically.</p>
+      <p class="hint">Tip: copy the name and link columns from Excel or Google Sheets and paste into a name box to fill many rows at once. The list is saved automatically in this browser.</p>
     </section>
 
     <section class="card preview">
@@ -120,7 +119,7 @@
   const rowsEl = document.getElementById("rows");
   const summary = document.getElementById("summary");
   const generateButton = document.getElementById("generate");
-  const json = { method: "POST", headers: { "Content-Type": "application/json" } };
+  const STORAGE_KEY = "clinic-stickers:clinics";
 
   function addRow(clinic = {}) {
     const row = document.getElementById("row").content.firstElementChild.cloneNode(true);
@@ -144,13 +143,36 @@
     status.className = "status " + kind;
   }
 
+  // The list lives in this browser, so everyone using the page keeps their own.
   let saveTimer;
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      fetch("/api/clinics", { ...json, body: JSON.stringify({ clinics: filledRows().map(values) }) })
-        .catch(() => { summary.textContent = "Could not save: is app.py still running?"; });
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(filledRows().map(values)));
+      } catch {
+        summary.textContent = "Could not save the list in this browser.";
+      }
     }, 600);
+  }
+
+  function savedClinics() {
+    try {
+      const clinics = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return Array.isArray(clinics) ? clinics : [];
+    } catch {
+      return [];
+    }
+  }
+
+  // Saves a PDF sent as base64 to the browser's Downloads folder.
+  function download(file, base64) {
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    link.download = file;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
   }
 
   // ---- Preview: the template itself in an iframe, filled in for the row being edited.
@@ -234,25 +256,28 @@
   });
 
   document.getElementById("add").addEventListener("click", () => addRow().querySelector("input").focus());
-  document.getElementById("open").addEventListener("click", () => fetch("/api/open", { ...json, body: "{}" }));
 
-  // ---- Generating: the server answers with one line of JSON per clinic as it finishes.
+  // ---- Generating: the server answers with one line of JSON per clinic as it finishes, PDF included.
   generateButton.addEventListener("click", async () => {
     const sent = filledRows();
     if (!sent.length) { summary.textContent = "Add a clinic first."; return; }
-    clearTimeout(saveTimer);  // generating saves the list too
     generateButton.disabled = true;
     sent.forEach((row) => setStatus(row, ""));
     let made = 0, finished = 0, attention = 0;
     summary.textContent = `Generating 0 of ${sent.length}…`;
     try {
-      const response = await fetch("/api/generate", { ...json, body: JSON.stringify({ clinics: sent.map(values) }) });
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clinics: sent.map(values) }),
+      });
       if (!response.ok) throw new Error("the generator did not answer; start it again with start.bat");
       const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffer = "";
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (!value.includes("\n")) { buffer += value; continue; }  // lines carry whole PDFs: split only at their ends
         const lines = (buffer + value).split("\n");
         buffer = lines.pop();
         for (const line of lines.filter(Boolean)) {
@@ -261,7 +286,8 @@
           const notes = result.notes.join("; ");
           if (result.file) {
             made++;
-            setStatus(sent[result.row - 1], `Saved as output/${result.file}` + (notes ? ` (${notes})` : ""), notes ? "warn" : "ok");
+            download(result.file, result.pdf);
+            setStatus(sent[result.row - 1], `Downloaded ${result.file}` + (notes ? ` (${notes})` : ""), notes ? "warn" : "ok");
           } else {
             setStatus(sent[result.row - 1], notes, "error");
           }
@@ -278,13 +304,11 @@
     }
   });
 
-  // ---- Start with the saved list
-  fetch("/api/clinics").then((response) => {
-    if (!response.ok && response.status !== 500) throw new Error("not served by app.py");
-    return response.json();
-  }).then((clinics) => {
-    if (clinics.error) summary.textContent = clinics.error;
-    (Array.isArray(clinics) && clinics.length ? clinics : [{}]).forEach(addRow);
+  // ---- Start with the list saved in this browser, once the generator answers
+  fetch("/api/qr?url=").then((response) => {
+    if (!response.ok) throw new Error("not served by app.py");
+    const clinics = savedClinics();
+    (clinics.length ? clinics : [{}]).forEach(addRow);
     preview(rowsEl.firstElementChild);
   }).catch(() => {
     // Opened as a file or through an editor's preview server: nothing here can work.
