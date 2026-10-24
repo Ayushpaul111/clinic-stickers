@@ -51,12 +51,31 @@ This writes the PDFs to `output/` on the host computer.
 
 The CSV has the columns `name_bn`, `url` and `slug` (optional file name).
 
+## Running with Docker
+
+On a Linux computer with Docker, the app can run in a container instead,
+without installing Python or Edge:
+
+```
+docker compose up -d --build
+```
+
+`docker compose logs` shows the two addresses, the same as above. The app
+starts again when the computer restarts. To stop it: `docker compose down`.
+
+The container uses the computer's own network (host networking), so the page
+is on port 8765 of the computer, as with `python app.py`. If a firewall is on,
+allow that port, for example `sudo ufw allow 8765/tcp`. The PDFs are rendered
+with Chromium instead of Edge.
+
 ## Project layout
 
 ```
 app.py              web server for the page (this computer and the local network)
 generate.py         QR codes and PDF rendering
 start.bat           starts the app
+Dockerfile          container image for the app
+compose.yaml        runs the container on the local network
 static/
   app.html          the page
   template.html     the sticker sheet layout

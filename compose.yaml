@@ -1,0 +1,10 @@
+services:
+  stickers:
+    build: .
+    # Uses this computer's network, as running app.py directly does: the page is on port 8765
+    # of every address this computer has, the logs show the address for other computers, and
+    # the page also opens by this computer's name.
+    network_mode: host
+    init: true  # cleans up the browser processes after each export
+    ipc: host  # Chromium needs more shared memory than Docker gives a container by default
+    restart: unless-stopped
