@@ -1,0 +1,9 @@
+.git/
+output/
+__pycache__/
+*.pyc
+clinics.csv
+.venv/
+venv/
+.vscode/
+.idea/

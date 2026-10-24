@@ -7,6 +7,7 @@ codes are vector in the PDF; the artwork is embedded at its full resolution.
 """
 
 import csv
+import os
 import re
 import sys
 from pathlib import Path
@@ -20,6 +21,9 @@ STATIC = ROOT / "static"  # the page, the sticker template and the artwork it us
 TEMPLATE = STATIC / "template.html"
 LOGO = STATIC / "medikzo-logo-qr.png"
 OUTPUT = ROOT / "output"
+
+# Browser that renders the PDFs: Edge, which comes with Windows. The Docker image uses Playwright's Chromium.
+BROWSER_CHANNEL = os.environ.get("BROWSER_CHANNEL", "msedge")
 
 # Printed size of the sheet. The artwork is 3072 x 2048 px, the same 3:2 shape.
 SHEET_WIDTH_IN, SHEET_HEIGHT_IN = 18, 12
@@ -116,7 +120,7 @@ def generate(rows, output_dir: Path = OUTPUT):
     used_slugs = set()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel="msedge")
+        browser = p.chromium.launch(channel=BROWSER_CHANNEL)
         page = browser.new_page()
         page.goto(TEMPLATE.as_uri())
 
